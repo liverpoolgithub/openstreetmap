@@ -7,6 +7,7 @@ function [] = show_map(ax, bounds, map_img_filename)
 %   http://www.mathworks.com/matlabcentral/fileexchange/32462-correctly-proportion-a-latlon-plot
 %
 % 2010.11.21 (c) Ioannis Filippidis, jfilippidis@gmail.com
+% (Modified by) Elias Griffith, e.griffith@liverpool.ac.uk
 %
 % See also PLOT_WAY.
 
@@ -14,9 +15,13 @@ hold(ax, 'on')
 
 % image provided ?
 if ~isempty(map_img_filename)
+  try
     map_img = imread(map_img_filename);
     image('Parent', ax, 'CData', flipdim(map_img,1),...
           'XData', bounds(1,1:2), 'YData', bounds(2,1:2))
+  catch
+    warning('Can not locate image %s', map_img_filename);
+  end
 end
 
 plot(ax, [bounds(1,1), bounds(1,1), bounds(1,2), bounds(1,2), bounds(1,1)],...

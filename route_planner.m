@@ -57,9 +57,5 @@ end
 % no path found ?
 if isempty(route)
     warning('No route found by the route planner. Try without road directions.')
-    return
 end
 
-%% report
-disp('Distance: ')
-disp(dist.')

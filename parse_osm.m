@@ -8,6 +8,7 @@ function [parsed_osm] = parse_osm(osm_xml)
 %   functions.
 %
 % 2010.11.20 (c) Ioannis Filippidis, jfilippidis@gmail.com
+% (Modified by) Elias Griffith, e.griffith@liverpool.ac.uk
 %
 % See also PARSE_OPENSTREETMAP, LOAD_OSM_XML.
 
@@ -28,11 +29,27 @@ function [parsed_osm] = parse_osm(osm_xml)
 %           tags (k=v)
 %           Attributes
 
-parsed_osm.bounds = parse_bounds(osm_xml.bounds);
 parsed_osm.node = parse_node(osm_xml.node);
 parsed_osm.way = parse_way(osm_xml.way);
 %parsed_osm.relation = parse_relation(osm.relation);
 parsed_osm.Attributes = osm_xml.Attributes;
+
+% Some exports don't contain bounds tags
+try
+  parsed_osm.bounds = parse_bounds(osm_xml.bounds);
+catch
+  parsed_osm.bounds = parse_bounds_ext(parsed_osm.node);
+end
+
+
+function [parsed_bounds] = parse_bounds_ext(node)
+
+xmin = min(node.xy(1,:));
+xmax = max(node.xy(1,:));
+ymin = min(node.xy(2,:));
+ymax = max(node.xy(2,:));
+
+parsed_bounds = [xmin, xmax; ymin, ymax];
 
 function [parsed_bounds] = parse_bounds(bounds)
 bounds = bounds.Attributes;
@@ -71,11 +88,7 @@ for i=1:Nways
     Nnd = size(waytemp.nd, 2);
     ndtemp = zeros(1, Nnd);
     for j=1:Nnd
-        if Nnd == 1
-            ndtemp(1,j) = str2double(waytemp.nd.Attributes.ref);
-        else
-            ndtemp(1, j) = str2double(waytemp.nd{j}.Attributes.ref);
-        end
+        ndtemp(1, j) = str2double(waytemp.nd{j}.Attributes.ref);
     end
     nd{1, i} = ndtemp;
     

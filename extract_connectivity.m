@@ -1,5 +1,4 @@
-function [connectivity_matrix, intersection_node_indices] = ...
-    extract_connectivity(parsed_osm)
+function [connectivity_dist, connectivity_way, intersection_node_indices] = extract_connectivity(parsed_osm)
 %EXTRACT_CONNECTIVITY   extract road connectivity from parsed OpenStreetMap
 %   [connectivity_matrix, intersection_nodes] = EXTRACT_CONNECTIVITY(parsed_osm)
 %   extracts the connectivity of the road network of the OpenStreetMap
@@ -25,109 +24,80 @@ function [connectivity_matrix, intersection_node_indices] = ...
 %                                   | 0 (otherwise)
 %   intersection_nodes = the unique nodes of the intersections
 %
-% 2010.11.20 (c) Ioannis Filippidis, jfilippidis@gmail.com
-%
 % See also PARSE_OPENSTREETMAP, PLOT_WAY.
+%
+% File:         extract_connectivity.m
+% Author:       Ioannis Filippidis, jfilippidis@gmail.com
+%               (Modified by) Elias Griffith, e.griffith@liverpool.ac.uk
+% Date:         2010.11.20
+% Language:     MATLAB R2011b
+% Purpose:      extract road connectivity from parsed osm structure
+% Copyright:    Ioannis Filippidis, 2010-
 
 [~, node, way, ~] = assign_from_parsed(parsed_osm);
 
-road_vals = {'motorway', 'motorway_link', 'trunk', 'trunk_link',...
-             'primary', 'primary_link', 'secondary', 'secondary_link',...
-             'tertiary', 'road', 'residential', 'living_street',...
-             'service', 'services', 'motorway_junction'};
-
-%% connectivity
-Nsamends = 0;
-connectivity_matrix = sparse([]);
-
 ways_num = size(way.id, 2);
 ways_node_sets = way.nd;
+ways_dists = way.dist;
 node_ids = node.id;
-for curway=1:ways_num
-    % highway?
-    [key, val] = get_way_tag_key(way.tag{1, curway} );
-    if strcmp(key, 'highway') == 0
-        continue;
-    end
-    
-    % road?
-    if isempty(ismember(road_vals, val) == 1) == 1
-        continue;
-    end
-    
-    % current way node set
-    nodeset = ways_node_sets{1, curway};
-    nodes_num = size(nodeset, 2);
-    
-    % first node id
-    first_node_id = nodeset(1, 1);
-    node1_index = find(first_node_id == node_ids);
-    
-    % which other nodes connected to node1 ?
-    curway_id = way.id(1, curway);
-    for othernode_local_index=1:nodes_num
-        othernode_id = nodeset(1, othernode_local_index);
-        othernode_index = find(othernode_id == node_ids);
-        
-        % assume nodes are not connected
-        connectivity_matrix(node1_index, othernode_index) = 0;
-        
-        % ensure the connectivity matrix is square
-        % (although it does not need be symmetric,
-        %  because the transportation netwrok graph is directed)
-        connectivity_matrix(othernode_index, node1_index) = 0;
-        
-        % directed graph, hence asymmetric connectivity matrix (in general)
-        for otherway=1:ways_num
-            % skip same way
-            otherway_id = way.id(1, otherway);
-            if otherway_id == curway_id
-                continue;
-            end
-            
-            otherway_nodeset = ways_node_sets{1, otherway};
-            idx = find(otherway_nodeset == othernode_id, 1);
-            if isempty(idx) == 0
-                Nsamends = Nsamends +1;
-                connectivity_matrix(node1_index, othernode_index) = 1;
-                node1_index = [node1_index, othernode_index];
-                
-                % node1 connected to othernode
-                % othernode belongs to at least one other way
-                % hence othernode is an intersection
-                % node1->othernode connectivity saved in connectivity_matrix
-                % this suffices, ignore rest of ways through othernode
-                break;
-            end
-        end
-        
-        % error check
-        if size(connectivity_matrix, 1) ~= size(connectivity_matrix, 2)
-            error(['connectivity matrix is not square. Instead:\n', ...
-                   'size(connectivity_matrix) = ',...
-                   num2str(size(connectivity_matrix) ) ] )
-        end
-    end
+
+%% FILTER
+roadWays = [];
+for curWay=1:ways_num
+  % highway/bridge?
+  tagList = way.tag{curWay};
+  isDrivable = IsDrivableWay(tagList);
+  if (isDrivable)
+    roadWays = cat(2, roadWays, curWay);
+  end
 end
 
-% connectivity matrix should not contain any self-loops
-for i=1:size(connectivity_matrix)
-    connectivity_matrix(i, i) = 0;
+%% CONNECT
+connectivity_dist = sparse([]);
+connectivity_way = sparse([]);
+intersection_node_indices = [];
+for curWay=roadWays
+  % Get path
+  nodeset = ways_node_sets{curWay};
+  % Get points connected by path
+  startNode = nodeset(1);
+  endNode = nodeset(end);
+  if (startNode~=endNode)
+    
+    curDist = ways_dists(curWay);
+    
+    startNode_index = find(node_ids == startNode);
+    endNode_index = find(node_ids == endNode);  
+    
+    try
+      prevDist = connectivity_dist(startNode_index, endNode_index);
+    catch
+      prevDist = 0;
+    end
+    
+    if (prevDist==0)
+      connectivity_dist(startNode_index, endNode_index) = curDist;
+      connectivity_dist(endNode_index, startNode_index) = curDist;
+      connectivity_way(startNode_index, endNode_index) = curWay;
+      connectivity_way(endNode_index, startNode_index) = curWay;
+    else
+%       warning('Path already exists - TODO: Handle multiple direct paths between two nodes');
+%       disp('(For now I only connect the shortest path between two nodes, which may remove possible starting roads)');
+%       disp('One option would be a 3D connectivity matrix!')
+      if (curDist<prevDist)
+        % disp('-> RESULT: Using path with shorter distance!');
+        connectivity_dist(startNode_index, endNode_index) = curDist;
+        connectivity_dist(endNode_index, startNode_index) = curDist;
+        connectivity_way(startNode_index, endNode_index) = curWay;
+        connectivity_way(endNode_index, startNode_index) = curWay;
+      else
+        % disp('-> RESULT: Path ignored!');
+      end
+    end
+    
+    intersection_node_indices = cat(2, intersection_node_indices, startNode_index, endNode_index);
+  end
 end
+intersection_node_indices = unique(intersection_node_indices);
 
-%% unique nodes
-nnzrows = any(connectivity_matrix, 2);
-nnzcmns = any(connectivity_matrix, 1);
-
-nnznds = nnzrows.' | nnzcmns;
-intersection_node_indices = find(nnznds == 1);
-
-figure;
-    spy(connectivity_matrix)
-
-%% report
-disp( ['Found ' num2str(Nsamends) ' common nodes.'] )
-disp( ['Connectivity matrix contains ' num2str(nnz(connectivity_matrix) )...
-       ' nonzero elements.'] )
-disp( ['Although the unique ones were '...
-        num2str(nnz(nnznds) ) '.'] )
+end

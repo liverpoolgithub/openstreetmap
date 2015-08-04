@@ -1,5 +1,4 @@
 function [bounds, node, way, relation] = assign_from_parsed(parsed_osm)
-% assign from parsed osm structure
 %
 % See also PLOT_WAY, EXTRACT_CONNECTIVITY.
 %

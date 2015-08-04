@@ -16,51 +16,87 @@
 %          GET_UNIQUE_NODE_XY, ROUTE_PLANNER, PLOT_ROUTE, PLOT_NODES.
 %
 % 2010.11.25 (c) Ioannis Filippidis, jfilippidis@gmail.com
+% (Modified by) Dr. Elias Griffith, e.griffith@liverpool.ac.uk
+%
+% Beware: Uses modified OpenStreetMap functions from "LiverpoolGithub" branch!!!
 
-%% name file
-openstreetmap_filename = 'map.osm';
-%map_img_filename = 'map.png'; % image file saved from online, if available
 
-%% convert XML -> MATLAB struct
-% convert the OpenStreetMap XML Data file donwloaded as map.osm
-% to a MATLAB structure containing part of the information describing the
-% transportation network
-[parsed_osm, osm_xml] = parse_openstreetmap(openstreetmap_filename);
+clear;
+close all;
+clc;
+drawnow;
 
-%% find connectivity
-[connectivity_matrix, intersection_node_indices] = extract_connectivity(parsed_osm);
-intersection_nodes = get_unique_node_xy(parsed_osm, intersection_node_indices);
+dbstop if error;
 
-%% plan a route
-%{
-% try with the assumption of one-way roads (ways in OSM)
-start = 1105; % node id
-target = 889;
-dg = connectivity_matrix; % directed graph
-[route, dist] = route_planner(dg, start, target);
-%}
+addpath(genpath(strcat(pwd,'/depends')));
 
-% try without the assumption of one-way roads
-start = 1; % node global index
-target = 9;
-dg = or(connectivity_matrix, connectivity_matrix.'); % make symmetric
-[route, dist] = route_planner(dg, start, target);
+%% Loading
+filename = 'bayeux.osm';
+filename_image = strrep(filename, '.osm', '.png');
+filename_cached = strrep(filename, '.osm', '.mat');
+loadTimer = tic;
+try
+  %% Load cached mat file
+  load(filename_cached);
+catch err
+  %% On failure (re)parse xml
+  fprintf('Cached file ''%s'' not found, parsing ''%s''\n', filename_cached, filename);
+  
+  %% Read XML - uses a function xml2mat that reads EVERYTHING at once.
+  parsed_osm = parse_openstreetmap(filename);
+  
+  %% NED Origin - Use the mean latitude-longitude as local NED origin
+  refLL = mean(parsed_osm.node.xy, 2);
+  refLLA = [refLL(2); refLL(1);0];
+  refLLA = deg2rad_LLA(refLLA);
+  
+  %% Break up user drawn roads into a standard method of connecting nodes.
+  parsed_osm = breakup_osm(parsed_osm, refLLA);  % CHANGES NODE IDS !!!
 
-%% plot
-fig = figure;
-ax = axes('Parent', fig);
-hold(ax, 'on')
+  %% Read through tags and add arrays to "parsed_osm.way"
+  save(filename_cached, 'parsed_osm', 'refLLA');
+end
+loadTime = toc(loadTimer);
+fprintf('Load time = %0.2f\n', loadTime);
 
-% plot the network, optionally a raster image can also be provided for the
-% map under the vector graphics of the network
-plot_way(ax, parsed_osm)
-%plot_way(ax, parsed_osm, map_img_filename) % if you also have a raster image
 
-plot_route(ax, route, parsed_osm)
-only_nodes = 1:10:1000; % not all nodes, to reduce graphics memory & clutter
-plot_nodes(ax, parsed_osm, only_nodes)
+%% Connectivity
+disp('Determinining Connectivity');
+[connectivity_matrix, intersection_nodes] = extract_connectivity(parsed_osm);
 
-% show intersection nodes (unseful, but may result into a cluttered plot)
-%plot_nodes(ax, parsed_osm, intersection_node_indices)
+%% Route finding - in this example, "Route via node 305"
+ROUTING = true;
+if (ROUTING)
+  disp('Calculating route');  % Node numbers specific to "bayeux.osm"
+  [route1] = route_planner(connectivity_matrix, 15875, 305);
+  [route2] = route_planner(connectivity_matrix, 305, 6);
+  route = [route1, route2(2:end)];
+  routeDetailed = expand_route(route, parsed_osm);
+end
 
-hold(ax, 'off')
+%% Figure
+disp('Plotting map...');
+tic;
+hFig = figure(1);
+hAx = axes('parent', hFig);
+
+DISP_NODES = true;  % Nodes are already labelled with matrix index.
+DISP_NODE_IDS = false;  % Additionally, show the OpenStreetMap node ids.  
+
+%% Roads
+plot_way(hAx, parsed_osm, true, filename_image);
+
+%% Connectivity
+plot_road_network(hAx, connectivity_matrix, parsed_osm, false);
+if (DISP_NODES)
+  [i,j] = find(connectivity_matrix>0);
+  plot_nodes(hAx, parsed_osm, i', DISP_NODE_IDS);
+end
+
+%% Routes
+if (ROUTING)
+  plot_route(hAx, routeDetailed, parsed_osm);
+end
+
+disp('Map plotted');
+toc

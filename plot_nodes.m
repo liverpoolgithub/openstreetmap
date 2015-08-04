@@ -1,4 +1,4 @@
-function [] = plot_nodes(ax, parsed_osm, only_node_indices, show_id)
+function [hNodes] = plot_nodes(ax, parsed_osm, only_node_indices, show_id)
 % plot (selected) nodes and label each with index and id
 %
 % usage
@@ -15,6 +15,7 @@ function [] = plot_nodes(ax, parsed_osm, only_node_indices, show_id)
 %           = 0 (do not show labels) | 1 (show labels)
 %
 % 2012.04.24 (c) Ioannis Filippidis, jfilippidis@gmail.com
+% (Modified by) Elias Griffith, e.griffith@liverpool.ac.uk
 %
 % See also PARSE_OPENSTREETMAP, ROUTE_PLANNER.
 
@@ -33,6 +34,11 @@ if nargin < 3
     only_node_indices = 1:n;
 end
 
+if (size(only_node_indices,1)~=1)
+  error('only_node_indices must be a ROW vector');
+end
+  
+
 %% plot
 held = takehold(ax);
 
@@ -42,19 +48,25 @@ if n < max(only_node_indices)
     return
 end
 
+hNodes = hggroup;
+
 % plot nodes
 xy = node_xys(:, only_node_indices);
-plotmd(ax, xy, 'yo')
+hTemp = plotmd(ax, xy, 'yo');
+%set(hTemp, 'HitTest', 'off');
+set(hTemp, 'Parent', hNodes);
 
 % label plots
 for i=only_node_indices
-    node_id_txt = num2str(node_ids(1, i) );
+    node_id_txt = num2str(node_ids(i));
     if show_id
-        curtxt = {['index=', num2str(i) ], ['id=', node_id_txt] }.';
+        curtxt = {['  ', num2str(i) ], ['id=', node_id_txt] }.';
     else
-        curtxt = ['index=', num2str(i) ];
+        curtxt = ['  ', num2str(i) ];
     end
-    textmd(node_xys(:, i), curtxt, 'Parent', ax)
+    hTemp = textmd(node_xys(:, i), curtxt, 'Parent', ax);
+    %set(hTemp, 'HitTest', 'off');
+    set(hTemp, 'Parent', hNodes);
 end
 
-restorehold(ax, held)
+givehold(ax, held)

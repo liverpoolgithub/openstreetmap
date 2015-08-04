@@ -1,4 +1,4 @@
-function [] = plot_route(ax, route, parsed_osm)
+function [hRoute] = plot_route(ax, route, parsed_osm, lineColour)
 % plot (over map) the route found by route planner
 %
 % usage
@@ -12,8 +12,13 @@ function [] = plot_route(ax, route, parsed_osm)
 %                parse_openstreetmap function.
 %
 % 2012.04.24 (c) Ioannis Filippidis, jfilippidis@gmail.com
+% (Modified by) Elias Griffith, e.griffith@liverpool.ac.uk
 %
 % See also ROUTE_PLANNER, PARSE_OPENSTREETMAP.
+
+if (nargin<4)
+  lineColour = 'k';
+end
 
 % empty path ?
 if isempty(route)
@@ -22,14 +27,19 @@ if isempty(route)
 end
 
 nodexy = parsed_osm.node.xy;
-start_xy = nodexy(:, route(1, 1) );
-path_xy = nodexy(:, route);
-path_end = nodexy(:, route(1, end) );
+start_xy = nodexy(:, route.id(1) );
+path_xy = nodexy(:, route.id);
+path_end = nodexy(:, route.id(end) );
 
 held = takehold(ax);
 
-plotmd(ax, start_xy, 'Color', 'm', 'Marker', 'o', 'MarkerSize', 15)
-plotmd(ax, path_xy, 'Color', 'r', 'LineStyle', '--', 'LineWidth', 5)
-plotmd(ax, path_end, 'Color', 'c', 'Marker', 's', 'MarkerSize', 15)
+hRoute = hggroup;
 
-restorehold(ax, held)
+hTemp = plotmd(ax, start_xy, 'Color', lineColour, 'Marker', 'o', 'MarkerSize', 10, 'LineWidth',2);
+set(hTemp, 'Parent', hRoute);
+hTemp = plotmd(ax, path_xy, 'Color', lineColour, 'LineStyle', '--', 'LineWidth', 4);
+set(hTemp, 'Parent', hRoute);
+hTemp = plotmd(ax, path_end, 'Color', lineColour, 'Marker', 's', 'MarkerSize', 10, 'LineWidth',2);
+set(hTemp, 'Parent', hRoute);
+
+givehold(ax, held)
